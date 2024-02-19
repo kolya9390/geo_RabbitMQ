@@ -1,0 +1,25 @@
+version: '3'
+services:
+  rebbitMQ:
+    image: rabbitmq:3.12-management
+    container_name: ${REBBTI_HOST}
+    ports:
+        - "5672:5672"
+        - "15672:15672"
+    networks:
+      - myNetwork
+  server_notifications:
+    build: .
+    ports:
+      - ${RPC_PORT}:${RPC_PORT}
+    container_name: server_notifications
+    volumes:
+      - ".env:/server_app/.env"
+    networks:
+      - myNetwork
+
+networks:
+  myNetworkDB:
+    
+  myNetwork:
+    name: local

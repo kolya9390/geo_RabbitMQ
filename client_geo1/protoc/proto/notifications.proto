@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package notific_service;
+
+option go_package = "./notific_service";
+
+message RequestSMS {}
+
+message RespSMS {
+    string phones = 1;
+    string msg =2;
+}
+
+message RespListSMS {
+    repeated RespSMS SMSlist = 1;
+}
+
+message RequestEmail {}
+
+message RespEmail {
+    string email = 1;
+    string msg = 2;
+}
+
+message RespListEmail{
+    repeated RespEmail ListEmail = 1;
+}
+
+service NotificServiceGRPC {
+    rpc SmsSend(RequestSMS) returns (RespListSMS){}
+    rpc EmailSend(RequestEmail) returns (RespListEmail){}
+}
