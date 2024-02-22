@@ -1,3 +1,0 @@
-# github.com/rabbitmq/amqp091-go
-/home/kolya9093/go/pkg/mod/github.com/rabbitmq/amqp091-go@v1.9.0/connection.go:1067:16: undefined: os.ReadFile
-note: module requires Go 1.16

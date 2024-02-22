@@ -11,13 +11,17 @@ require (
 	google.golang.org/protobuf v1.31.0
 )
 
-require github.com/benbjohnson/clock v1.3.0 // indirect
+require (
+	github.com/benbjohnson/clock v1.3.0 // indirect
+	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0 // indirect
+)
 
 require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/onsi/gomega v1.31.1 // indirect
 	github.com/streadway/amqp v1.1.0
+	gitlab.com/ptflp/gopubsub v1.1.2
 	go.uber.org/ratelimit v0.3.0
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect

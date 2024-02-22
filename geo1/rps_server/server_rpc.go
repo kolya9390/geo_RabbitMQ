@@ -13,7 +13,10 @@ import (
 	"github.com/kolya9390/gRPC_GeoProvider/server_rpc/config"
 	geo_provider "github.com/kolya9390/gRPC_GeoProvider/server_rpc/gen"
 	"github.com/kolya9390/gRPC_GeoProvider/server_rpc/service/dadata"
-	"github.com/kolya9390/gRPC_GeoProvider/server_rpc/service/rebbit"
+	"gitlab.com/ptflp/gopubsub/kafkamq"
+	"gitlab.com/ptflp/gopubsub/queue"
+	"gitlab.com/ptflp/gopubsub/rabbitmq"
+
 	"github.com/kolya9390/gRPC_GeoProvider/server_rpc/storage"
 	_ "github.com/lib/pq"
 	"github.com/streadway/amqp"
@@ -38,7 +41,7 @@ func NewGeoServis() *GeoService {
 
 func (gs *GeoService) StartServer() error {
 
-	config := config.NewAppConf("server_app/.env")
+	config := config.NewAppConf()
 
 	// Инициализация подключения к базе данных
 	connstr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
@@ -48,7 +51,7 @@ func (gs *GeoService) StartServer() error {
 	if err != nil {
 		log.Fatalf("Error connecting to the database: %s", err)
 	}
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 6)
 	// Проверка соединения с базой данных
 	if err := db.Ping(); err != nil {
 		log.Fatalf("Error pinging the database: %s", err)
@@ -65,19 +68,38 @@ func (gs *GeoService) StartServer() error {
 
 	// rebbit
 	urlRebbit := fmt.Sprintf("amqp://guest:guest@%s:5672/", config.Rebbit_host)
+	urlKafkaCon := fmt.Sprintf("%s:%s", config.Kafka.Host, config.Kafka.Port)
 
-	conn, err := amqp.Dial(urlRebbit)
-	if err != nil {
-		log.Fatalf("Error conn: %s", err)
+	var broker queue.MessageQueuer
+	switch config.Broker_type {
+	case "kafka":
+		service_kafka, err := kafkamq.NewKafkaMQ(urlKafkaCon, "myGroup")
+
+		if err != nil {
+			log.Printf("Error NewKafkaMQ: %s", err)
+		}
+		broker = service_kafka
+		log.Println("successful conn Kafka")
+	case "rebbit":
+		conn, err := amqp.Dial(urlRebbit)
+		if err != nil {
+			log.Fatalf("Error conn: %s", err)
+		}
+		defer conn.Close()
+		sevisRebbit, err := rabbitmq.NewRabbitMQ(conn)
+
+		if err != nil {
+			log.Printf("Error NewRebbit: %s", err)
+		}
+		broker = sevisRebbit
+		log.Println("successful conn RebbitMQ")
+	default:
+		log.Fatalf("Unknown broker type: %s", config.Broker_type)
+		return fmt.Errorf("unknown broker type: %s", config.Broker_type)
 	}
-	log.Println("successful conn RebbitMQ")
-
-	defer conn.Close()
-
-	serviceRebbit, err := rebbit.NewRabbitMQ(conn)
-
 	if err != nil {
-		log.Fatalf("Error NewRebbit: %s", err)
+		log.Printf("Error subscribing to messages: %v", err)
+		return err
 	}
 //
 	cache := storage.NewGeoRedis(redisClient)
@@ -90,7 +112,7 @@ func (gs *GeoService) StartServer() error {
 		log.Printf("Error conect DB %s", err)
 	}
 
-	gs.GeoProviderGRPCServer.geoProvider = app.NewGeoProvider(storageDB,sevisDAdata,serviceRebbit)
+	gs.GeoProviderGRPCServer.geoProvider = app.NewGeoProvider(storageDB,sevisDAdata,broker)
 	
 	//
 

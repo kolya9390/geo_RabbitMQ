@@ -1,4 +1,5 @@
-version: '3'
+version: '2'
+
 services:
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
@@ -6,7 +7,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - myNetwork
+      - nazarick
 
   kafka:
     image: wurstmeister/kafka:latest
@@ -27,27 +28,18 @@ services:
     depends_on:
       - zookeeper
     networks:
-      - myNetwork
+      - nazarick
 
-  rebbitMQ:
-    image: rabbitmq:3.12-management
-    container_name: ${REBBTI_HOST}
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq
     ports:
-        - "5672:5672"
-        - "15672:15672"
+      - "5672:5672"
+      - "15672:15672"
     networks:
-      - myNetwork
-  server_notifications:
-    build: .
-    ports:
-      - ${NOTIFIC_PORT}:${NOTIFIC_PORT}
-    container_name: server_notifications
-    volumes:
-      - ".env:/server_app/.env"
-    networks:
-      - myNetwork
+      - nazarick
 
-networks:    
-  myNetwork:
-    name: local
+networks:
+  nazarick:
     driver: bridge
+

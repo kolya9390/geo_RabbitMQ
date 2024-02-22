@@ -5,10 +5,9 @@ import (
 	"log"
 	"sync"
 	"time"
-
 	"github.com/kolya9390/gRPC_GeoProvider/server_rpc/service/dadata"
-	"github.com/kolya9390/gRPC_GeoProvider/server_rpc/service/rebbit"
 	"github.com/kolya9390/gRPC_GeoProvider/server_rpc/storage"
+	"gitlab.com/ptflp/gopubsub/queue"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -17,7 +16,7 @@ type GeoProviderService struct {
 	storege   storage.GeoRepository
 	limiter   *RateLimiter
 	service_d dadata.DadataService
-	service_r rebbit.MessageQueuer
+	service_broker queue.MessageQueuer
 }
 
 type RateLimiter struct {
@@ -46,11 +45,13 @@ func NewRateLimiter(rateLimit int, per time.Duration) *RateLimiter {
 	return rl
 }
 
-func NewGeoProvider(storageDB storage.GeoRepository, service_d dadata.DadataService, service_r rebbit.MessageQueuer) *GeoProviderService {
+func NewGeoProvider(storageDB storage.GeoRepository, service_d dadata.DadataService, service_broker queue.MessageQueuer) *GeoProviderService {
+
+
 	return &GeoProviderService{
 		storege:   storageDB,
 		service_d: service_d,
-		service_r: service_r,
+		service_broker: service_broker,
 		limiter:   NewRateLimiter(5, time.Minute)}
 }
 
@@ -79,22 +80,22 @@ func (gp *GeoProviderService) AddressSearch(input string) ([]*dadata.Address, er
 	}
 
 	requests := gp.limiter.Take("userTest")
-select {
-case requests <- time.Now():
-    // Лимит запросов не превышен, продолжаем выполнение
-default:
-    // Если метод Take() заблокирован, значит, лимит запросов превышен
-    // Отправляем сообщение в RabbitMQ
-    go func() {
-        err := gp.service_r.Publish("notification", []byte("пользователь превысил лимит TEST!"))
-        if err != nil {
-            log.Printf("Error publishing message to RabbitMQ: %v", err)
-        }
-    }()
+	select {
+	case requests <- time.Now():
+		// Лимит запросов не превышен, продолжаем выполнение
+	default:
+		// Если метод Take() заблокирован, значит, лимит запросов превышен
+		// Отправляем сообщение в RabbitMQ
+		go func() {
+			err := gp.service_broker.Publish("notification", []byte("пользователь превысил лимит TEST!"))
+			if err != nil {
+				log.Printf("Error publishing message to RabbitMQ: %v", err)
+			}
+		}()
 
-    // Возвращаем ошибку 429 Too Many Requests
-    return nil, status.Errorf(codes.ResourceExhausted, "429 Too Many Requests")
-}
+		// Возвращаем ошибку 429 Too Many Requests
+		return nil, status.Errorf(codes.ResourceExhausted, "429 Too Many Requests")
+	}
 	// Если данные в кэше устарели или их нет, обращаемся к сервису Dadata
 	respData, err := gp.service_d.AddressSearch(input)
 	if err != nil {
@@ -154,12 +155,12 @@ func (gp *GeoProviderService) GeoCode(lat, lng string) ([]*dadata.Address, error
 		// Если метод Take() заблокирован, значит, лимит запросов превышен
 		// Отправляем сообщение в RabbitMQ
 		go func() {
-			err := gp.service_r.Publish("notification", []byte("пользователь превысил лимит TEST!"))
+			err := gp.service_broker.Publish("notification", []byte("пользователь превысил лимит TEST!"))
 			if err != nil {
 				log.Printf("Error publishing message to RabbitMQ: %v", err)
 			}
 		}()
-	
+
 		// Возвращаем ошибку 429 Too Many Requests
 		return nil, status.Errorf(codes.ResourceExhausted, "429 Too Many Requests")
 	}

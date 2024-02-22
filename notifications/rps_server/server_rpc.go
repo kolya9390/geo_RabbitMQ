@@ -3,11 +3,13 @@ package rpcserver
 import (
 	"context"
 	"fmt"
+	"gitlab.com/ptflp/gopubsub/kafkamq"
+	"gitlab.com/ptflp/gopubsub/queue"
+	"gitlab.com/ptflp/gopubsub/rabbitmq"
 	"log"
 	"net"
 	"notific/config"
 	notific_service "notific/protoc/gen"
-	"notific/service"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -20,7 +22,7 @@ type NotificService struct {
 
 // GeoProviderGRPCServer must be embedded to have forward compatible implementations.
 type NotificProviderGRPCServer struct {
-	ServiceRebbit service.MessageQueuer
+	ServiceBroker queue.MessageQueuer
 	notific_service.UnimplementedNotificServiceGRPCServer
 	msseges []string
 }
@@ -31,48 +33,82 @@ func NewGeoServis() *NotificService {
 
 func (ns *NotificService) StartServer() error {
 
-	config := config.NewAppConf("server_app/.env")
-	urlRebbit := fmt.Sprintf("amqp://guest:guest@%s:5672/", config.Rebbit_host)
+	config := config.NewAppConf()
+	urlConRebbit := fmt.Sprintf("amqp://guest:guest@%s:5672/", config.Rebbit_host)
+	urlConKafka := fmt.Sprintf("%s:%s", config.Kafka.Host, config.Kafka.Port)
 
+//	log.Println(config)
 	time.Sleep(15 * time.Second)
 
-	conn, err := amqp.Dial(urlRebbit)
+	var err error
+	var messages <-chan queue.Message
+	switch config.BrokerType {
+	case "kafka":
+		service_kafka, err := kafkamq.NewKafkaMQ(urlConKafka, "myGroup")
+
+		if err != nil {
+			log.Printf("Error NewKafkaMQ: %s", err)
+		}
+		ns.ServiceBroker = service_kafka
+		log.Println("successful conn Kafka")
+		messages, err = ns.ServiceBroker.Subscribe("notification")
+	case "rebbit":
+		conn, err := amqp.Dial(urlConRebbit)
+		if err != nil {
+			log.Printf("Error conn: %s", err)
+		}
+
+		defer conn.Close()
+
+		sevisRebbit, err := rabbitmq.NewRabbitMQ(conn)
+
+		if err != nil {
+			log.Printf("Error NewRebbit: %s", err)
+		}
+		ns.ServiceBroker = sevisRebbit
+		log.Println("successful conn RebbitMQ")
+		if err := rabbitmq.CreateExchange(conn, "notification", "direct"); err != nil {
+			log.Printf("Error CreateExchange: %s", err)
+		}
+		messages, err = ns.ServiceBroker.Subscribe("notification")
+	default:
+		log.Fatalf("Unknown broker type: %s", config.BrokerType)
+		return fmt.Errorf("unknown broker type: %s", config.BrokerType)
+	}
 	if err != nil {
-		log.Fatalf("Error conn: %s", err)
+		log.Fatalf("Error subscribing to messages: %v", err)
+		return err
 	}
-	log.Println("successful conn RebbitMQ")
-
-	defer conn.Close()
-
-	sevisRebbit, err := service.NewRabbitMQ(conn)
-
-	if err != nil {
-		log.Fatalf("Error NewRebbit: %s", err)
-	}
-
-	if err := service.CreateExchange(conn, "notification", "direct"); err != nil {
-		log.Fatalf("Error Test CreateExchange: %s", err)
-	}
-
-	ns.ServiceRebbit = sevisRebbit
-
 	//
 
-	messages, err := ns.ServiceRebbit.Subscribe("notification")
 
-	go func() {
-		for d := range messages {
-			log.Println(string(d.Data))
-			ns.msseges = append(ns.msseges, string(d.Data))
+	go func(mssgs <- chan queue.Message) {
+		for {
+			select {
+			case msg, ok := <-mssgs:
+				if !ok {
+					return
+				}
+				if msg.Err != nil {
+					log.Printf("Failed to receive message: %s\n", msg.Err)
+				}
+				fmt.Printf("Received message: %s\n", string(msg.Data))
+				ns.msseges=append(ns.msseges, string(msg.Data))
+				// Подтверждаем получение сообщения
+				err = ns.ServiceBroker.Ack(&msg)
+				if err != nil {
+					log.Printf("Failed to ack message: %s\n", err)
+				}
+			}
+	
+
 		}
-	}()
-	if err != nil {
-		log.Println(err)
-	}
+
+	}(messages)
 
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%s", config.NoticRPC.Port))
 	if err != nil {
-		log.Printf("Eroor Listen %v", err)
+		log.Printf("Error Listen %v", err)
 		return err
 	}
 	defer listen.Close()
@@ -84,6 +120,7 @@ func (ns *NotificService) StartServer() error {
 	notific_service.RegisterNotificServiceGRPCServer(grpcServer,
 		&ns.NotificProviderGRPCServer)
 	grpcServer.Serve(listen)
+
 
 	return nil
 }

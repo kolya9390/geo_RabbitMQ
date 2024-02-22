@@ -19,13 +19,20 @@ type AppConf struct {
 	Token       Token    `yaml:"token"`
 	DB          DB       `yaml:"db"`
 	NoticRPC    NoticRPC  `yaml:"notic_rpc"`
+	Kafka		Kafka	  `yaml:"kafka"`
 	RPCServer   RPCServer `yaml:"rpc_server"`
 	UserRPC     UserRPC   `yaml:"user_rpc"`
 	AuthorizationDADATA	AuthorizationDADATA
 	Rebbit_host string
+	BrokerType string `yaml:"broker_type"`
 }
 
 type NoticRPC struct {
+	Host string `yaml:"host"`
+	Port string `yaml:"port"`
+}
+
+type Kafka struct{
 	Host string `yaml:"host"`
 	Port string `yaml:"port"`
 }
@@ -74,16 +81,17 @@ type Token struct {
 }
 
 
-func NewAppConf(envPath string /*"server_app/.env"*/) AppConf {
+func NewAppConf() AppConf {
 
-	env, err := godotenv.Read(envPath)
+	env, err := godotenv.Read("/server_app/.env")
 
 	if err != nil {
-		log.Println(err)
+		log.Printf("env Error:%s",err)
 	}
 //TODO COFIG
 	return AppConf{
 		AppName: env[AppName],
+		BrokerType: env["BROKER_TYPE"],
 		Rebbit_host: env["REBBTI_HOST"],
 		RPCServer: RPCServer{
 			Port: env["RPC_PORT"],
@@ -93,6 +101,10 @@ func NewAppConf(envPath string /*"server_app/.env"*/) AppConf {
 		NoticRPC: NoticRPC{
 			Host: env["NOTIFIC_HOST"],
 			Port: env["NOTIFIC_PORT"],
+		},
+		Kafka: Kafka{
+			Host: env["KAFKA_HOST"],
+			Port: env["KAFKA_PORT"],
 		},
 
 		UserRPC: UserRPC{

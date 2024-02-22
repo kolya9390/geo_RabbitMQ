@@ -1,5 +1,5 @@
 # Используем официальный образ Go как базовый
-FROM golang:1.20-alpine as builder
+FROM golang:1.22 as builder
 
 # Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /server_app
@@ -15,7 +15,7 @@ RUN  go mod tidy
 RUN go build -o main
 
 # Начинаем новую стадию сборки на основе минимального образа
-FROM alpine:latest
+FROM golang:1.22
 
 # Добавляем исполняемый файл из первой стадии в корневую директорию контейнера
 COPY --from=builder /server_app/main /main

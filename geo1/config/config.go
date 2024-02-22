@@ -20,7 +20,9 @@ type AppConf struct {
 	Token       Token  `yaml:"token"`
 	Rebbit_host string
 	DB          DB `yaml:"db"`
+	Broker_type string
 	GeoRPC GeoRPC
+	Kafka	Kafka
 	Cache
 	RPCServer           RPCServer `yaml:"rpc_server"`
 	UserRPC             UserRPC   `yaml:"user_rpc"`
@@ -66,6 +68,11 @@ type UserRPC struct {
 	Port string `yaml:"port"`
 }
 
+type Kafka struct{
+	Host string `yaml:"host"`
+	Port string `yaml:"port"`
+}
+
 type Token struct {
 	AccessTTL     time.Duration `yaml:"access_ttl"`
 	RefreshTTL    time.Duration `yaml:"refresh_ttl"`
@@ -73,9 +80,9 @@ type Token struct {
 	RefreshSecret string        `yaml:"refresh_secret"`
 }
 
-func NewAppConf(envPath string /*"server_app/.env"*/) AppConf {
+func NewAppConf() AppConf {
 
-	env, err := godotenv.Read(envPath)
+	env, err := godotenv.Read("/server_app/.env")
 
 	if err != nil {
 		log.Println(err)
@@ -83,7 +90,12 @@ func NewAppConf(envPath string /*"server_app/.env"*/) AppConf {
 	//TODO COFIG
 	return AppConf{
 		AppName:     env[AppName],
+		Broker_type: env["BROKER_TYPE"],
 		Rebbit_host: env["REBBTI_HOST"],
+		Kafka: Kafka{
+			Host: env["KAFKA_HOST"],
+			Port: env["KAFKA_PORT"],
+		},
 		GeoRPC: GeoRPC{
 			Host: env["GEO_HOST"],
 			Port: env["PORT_GEO"],
